@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Keeper</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#ffffff; --ink:#1c1b19; --muted:#726e68;
+    --accent:#c1502e; --accent-ink:#ffffff; --border:#e4e1da; --danger:#b3261e;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#161513; --card:#201f1c; --ink:#f2efe9; --muted:#a39d92;
+      --accent:#e07a52; --accent-ink:#1c1b19; --border:#3a372f; --danger:#ff6b60;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Sarabun,sans-serif;
+    display:flex; justify-content:center; padding:32px 16px;
+  }
+  .wrap{width:100%; max-width:480px;}
+  h1{font-size:1.4rem; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:0.9rem; margin-bottom:20px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:24px; margin-bottom:16px;
+  }
+  label{display:block; font-size:0.85rem; color:var(--muted); margin:14px 0 6px;}
+  input[type=text],input[type=password]{
+    width:100%; padding:11px 12px; border-radius:9px; border:1px solid var(--border);
+    background:var(--bg); color:var(--ink); font-size:1rem;
+  }
+  input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  .checkrow{display:flex; align-items:center; gap:8px; margin-top:14px; font-size:0.85rem; color:var(--muted);}
+  button{
+    border:none; border-radius:9px; padding:11px 16px; font-size:0.95rem;
+    font-weight:600; cursor:pointer; transition:opacity .15s;
+  }
+  button:disabled{opacity:.5; cursor:default;}
+  .btn-primary{background:var(--accent); color:var(--accent-ink); width:100%; margin-top:18px;}
+  .btn-ghost{background:transparent; color:var(--muted); text-decoration:underline; padding:6px 0;}
+  .btn-small{background:var(--accent); color:var(--accent-ink); padding:7px 12px; font-size:0.85rem;}
+  .btn-danger{background:transparent; color:var(--danger); padding:7px 10px; font-size:0.8rem;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .err{color:var(--danger); font-size:0.85rem; margin-top:10px; min-height:1em;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;}
+  .who{font-size:0.85rem; color:var(--muted);}
+  .file-item{
+    border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+    display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;
+  }
+  .file-name{font-weight:600; word-break:break-all; font-size:0.92rem;}
+  .file-meta{color:var(--muted); font-size:0.78rem; margin-top:2px;}
+  .actions{display:flex; gap:6px; flex-shrink:0;}
+  .empty{color:var(--muted); font-size:0.88rem; text-align:center; padding:24px 0;}
+  .upload-box{
+    border:2px dashed var(--border); border-radius:12px; padding:22px; text-align:center;
+    cursor:pointer; margin-bottom:18px;
+  }
+  .upload-box.drag{border-color:var(--accent);}
+  .upload-box p{margin:0; color:var(--muted); font-size:0.88rem;}
+  .hidden{display:none !important;}
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:20px;
+    font-size:0.85rem; opacity:0; pointer-events:none; transition:opacity .2s; z-index:50; max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1;}
+  .note{font-size:0.78rem; color:var(--muted); line-height:1.5;}
+  .progress{font-size:0.8rem; color:var(--accent); margin-top:8px; min-height:1em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="authScreen">
+    <h1>🔒 File Keeper</h1>
+    <div class="sub">ล็อกอินด้วย GitHub token ของคุณเอง ไฟล์ทุกไฟล์จะถูกเข้ารหัสก่อนเก็บ — เปิดจากอุปกรณ์ไหนก็ได้</div>
+    <div class="card">
+      <label for="tokenInput">GitHub Personal Access Token</label>
+      <input type="password" id="tokenInput" autocomplete="off" placeholder="ghp_xxxxxxxxxxxx">
+      <label for="passInput">รหัสผ่านเข้ารหัสไฟล์ (ตั้งเองครั้งแรก แล้วใช้ตัวเดิมทุกครั้ง)</label>
+      <input type="password" id="passInput" autocomplete="off" placeholder="อย่าลืมรหัสนี้ ลืมแล้วกู้คืนไฟล์ไม่ได้">
+      <div class="checkrow">
+        <input type="checkbox" id="rememberToken">
+        <label for="rememberToken" style="margin:0;">จำ token ไว้บนเครื่องนี้ (ไม่ต้องกรอกใหม่ทุกครั้ง)</label>
+      </div>
+      <button class="btn-primary" id="submitAuth">เข้าสู่ระบบ</button>
+      <div class="err" id="authErr"></div>
+      <div class="progress" id="authProgress"></div>
+    </div>
+    <div class="note">
+      ⚠️ token ต้องมีสิทธิ์ <strong>repo</strong> (หรือ Contents: Read & write สำหรับ fine-grained token) ให้กับ repo <code>File-Keeper</code><br><br>
+      🔑 รหัสผ่านเข้ารหัสไฟล์จะไม่ถูกส่งไปที่ไหนเลย ใช้เข้ารหัส/ถอดรหัสในเครื่องคุณเท่านั้น — ถ้าลืม จะกู้ไฟล์เก่าคืนไม่ได้
+    </div>
+  </div>
+
+  <div id="mainScreen" class="hidden">
+    <div class="topbar">
+      <h1 style="margin:0;">📁 File Keeper</h1>
+      <button class="btn-ghost" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+
+    <div class="upload-box" id="uploadBox">
+      <p>📤 แตะเพื่อเลือกไฟล์ หรือวางไฟล์ที่นี่<br><span style="font-size:0.78rem;">ไฟล์เดี่ยวไม่เกิน 25MB</span></p>
+      <input type="file" id="fileInput" class="hidden">
+    </div>
+    <div class="progress" id="mainProgress"></div>
+
+    <div id="fileList"></div>
+    <div class="empty hidden" id="emptyMsg">ยังไม่มีไฟล์ — อัปโหลดไฟล์แรกของคุณได้เลย</div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const OWNER = 'aomsinjaroensuk15-stack';
+const REPO = 'File-Keeper';
+const BRANCH = 'main';
+const SALT_PATH = 'vault/salt';
+const MANIFEST_PATH = 'vault/manifest.enc';
+const BLOB_DIR = 'vault/blobs';
+const CHECK_MAGIC = 'file-keeper-ok';
+
+let PAT = null;
+let AES_KEY = null;
+let manifest = { _check: CHECK_MAGIC, files: [] };
+let manifestSha = null;
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function setAuthErr(msg){ document.getElementById('authErr').textContent = msg; }
+function setAuthProgress(msg){ document.getElementById('authProgress').textContent = msg; }
+function setMainProgress(msg){ document.getElementById('mainProgress').textContent = msg || ''; }
+
+// ---------- base64 helpers ----------
+function bufToB64(buf){
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+function b64ToBuf(b64){
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// ---------- crypto helpers ----------
+async function deriveKey(passphrase, saltBytes){
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt: saltBytes, iterations: 150000, hash:'SHA-256' },
+    baseKey, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
+  );
+}
+async function encryptBytes(key, plainBuf){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, plainBuf);
+  const out = new Uint8Array(iv.length + cipher.byteLength);
+  out.set(iv, 0); out.set(new Uint8Array(cipher), iv.length);
+  return out.buffer;
+}
+async function decryptBytes(key, combinedBuf){
+  const bytes = new Uint8Array(combinedBuf);
+  const iv = bytes.slice(0,12);
+  const cipher = bytes.slice(12);
+  return crypto.subtle.decrypt({name:'AES-GCM', iv}, key, cipher);
+}
+async function encryptJson(key, obj){
+  const enc = new TextEncoder();
+  return encryptBytes(key, enc.encode(JSON.stringify(obj)));
+}
+async function decryptJson(key, buf){
+  const dec = new TextDecoder();
+  const plain = await decryptBytes(key, buf);
+  return JSON.parse(dec.decode(plain));
+}
+
+// ---------- GitHub API helpers ----------
+async function gh(path, opts={}){
+  const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/${path}`, {
+    ...opts,
+    headers: {
+      'Authorization': `token ${PAT}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.headers||{})
+    }
+  });
+  return res;
+}
+async function ghGetFile(path){
+  const res = await gh(`contents/${path}?ref=${BRANCH}`);
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error('GitHub API error ' + res.status);
+  const data = await res.json();
+  return { sha: data.sha, buf: b64ToBuf(data.content.replace(/\n/g,'')) };
+}
+async function ghPutFile(path, buf, sha, message){
+  const res = await gh(`contents/${path}`, {
+    method:'PUT',
+    body: JSON.stringify({
+      message: message || ('update ' + path),
+      content: bufToB64(buf),
+      branch: BRANCH,
+      ...(sha ? { sha } : {})
+    })
+  });
+  if(!res.ok){
+    const t = await res.text();
+    throw new Error('เขียนไฟล์ไม่สำเร็จ (' + res.status + ')');
+  }
+  return res.json();
+}
+async function ghDeleteFile(path, sha, message){
+  const res = await gh(`contents/${path}`, {
+    method:'DELETE',
+    body: JSON.stringify({ message: message || ('delete ' + path), sha, branch: BRANCH })
+  });
+  if(!res.ok) throw new Error('ลบไฟล์ไม่สำเร็จ');
+}
+async function verifyRepoAccess(){
+  const res = await gh('');
+  if(res.status === 401) throw { code:'bad_token' };
+  if(res.status === 404) throw { code:'no_repo_access' };
+  if(!res.ok) throw { code:'unknown' };
+  return res.json();
+}
+
+// ---------- auth flow ----------
+document.getElementById('submitAuth').onclick = async ()=>{
+  const token = document.getElementById('tokenInput').value.trim();
+  const pass = document.getElementById('passInput').value;
+  const remember = document.getElementById('rememberToken').checked;
+  setAuthErr(''); setAuthProgress('');
+  if(!token || !pass){ setAuthErr('กรอก token และรหัสผ่านให้ครบ'); return; }
+
+  const btn = document.getElementById('submitAuth');
+  btn.disabled = true;
+  PAT = token;
+  try{
+    setAuthProgress('กำลังตรวจสอบ token...');
+    await verifyRepoAccess();
+
+    setAuthProgress('กำลังโหลดข้อมูล...');
+    let saltFile = await ghGetFile(SALT_PATH);
+    let saltBytes;
+    if(!saltFile){
+      saltBytes = crypto.getRandomValues(new Uint8Array(16));
+      await ghPutFile(SALT_PATH, saltBytes.buffer, null, 'init salt');
+    } else {
+      saltBytes = new Uint8Array(saltFile.buf);
+    }
+
+    AES_KEY = await deriveKey(pass, saltBytes);
+
+    let manifestFile = await ghGetFile(MANIFEST_PATH);
+    if(!manifestFile){
+      manifest = { _check: CHECK_MAGIC, files: [] };
+      const enc = await encryptJson(AES_KEY, manifest);
+      const putRes = await ghPutFile(MANIFEST_PATH, enc, null, 'init manifest');
+      manifestSha = putRes.content.sha;
+    } else {
+      let decoded;
+      try{
+        decoded = await decryptJson(AES_KEY, manifestFile.buf);
+      }catch(e){
+        setAuthErr('รหัสผ่านไม่ถูกต้อง (ถอดรหัสข้อมูลเดิมไม่ได้)');
+        btn.disabled = false; setAuthProgress(''); return;
+      }
+      if(decoded._check !== CHECK_MAGIC){
+        setAuthErr('รหัสผ่านไม่ถูกต้อง'); btn.disabled=false; setAuthProgress(''); return;
+      }
+      manifest = decoded;
+      manifestSha = manifestFile.sha;
+    }
+
+    if(remember){ localStorage.setItem('fk_token', token); }
+    else { localStorage.removeItem('fk_token'); }
+
+    document.getElementById('tokenInput').value='';
+    document.getElementById('passInput').value='';
+    enterMain();
+  }catch(e){
+    if(e && e.code === 'bad_token') setAuthErr('Token ไม่ถูกต้องหรือหมดอายุ');
+    else if(e && e.code === 'no_repo_access') setAuthErr('Token นี้เข้าถึง repo File-Keeper ไม่ได้ (เช็คสิทธิ์ repo ของ token)');
+    else setAuthErr('เกิดข้อผิดพลาด: ' + (e && e.message ? e.message : 'ไม่ทราบสาเหตุ'));
+  }
+  btn.disabled = false;
+  setAuthProgress('');
+};
+
+document.getElementById('logoutBtn').onclick = ()=>{
+  PAT = null; AES_KEY = null; manifest = { _check:CHECK_MAGIC, files:[] }; manifestSha = null;
+  localStorage.removeItem('fk_token');
+  document.getElementById('mainScreen').classList.add('hidden');
+  document.getElementById('authScreen').classList.remove('hidden');
+};
+
+function enterMain(){
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('mainScreen').classList.remove('hidden');
+  renderFiles();
+}
+
+// ---------- file list ----------
+function fmtSize(n){
+  if(n < 1024) return n + ' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function renderFiles(){
+  const list = document.getElementById('fileList');
+  const empty = document.getElementById('emptyMsg');
+  const files = [...manifest.files].sort((a,b)=> new Date(b.uploadedAt) - new Date(a.uploadedAt));
+  if(files.length === 0){
+    list.innerHTML = ''; empty.classList.remove('hidden'); return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = '';
+  files.forEach(f=>{
+    const el = document.createElement('div');
+    el.className = 'file-item';
+    el.innerHTML = `
+      <div>
+        <div class="file-name">${escapeHtml(f.name)}</div>
+        <div class="file-meta">${fmtSize(f.size)} · ${new Date(f.uploadedAt).toLocaleString('th-TH')}</div>
+      </div>
+      <div class="actions">
+        <button class="btn-small" data-act="dl">ดาวน์โหลด</button>
+        <button class="btn-danger" data-act="del">ลบ</button>
+      </div>`;
+    el.querySelector('[data-act=dl]').onclick = ()=>downloadFile(f);
+    el.querySelector('[data-act=del]').onclick = ()=>deleteFile(f);
+    list.appendChild(el);
+  });
+}
+
+async function saveManifest(message){
+  const enc = await encryptJson(AES_KEY, manifest);
+  const res = await ghPutFile(MANIFEST_PATH, enc, manifestSha, message);
+  manifestSha = res.content.sha;
+}
+
+// ---------- upload ----------
+const uploadBox = document.getElementById('uploadBox');
+const fileInput = document.getElementById('fileInput');
+uploadBox.onclick = ()=>fileInput.click();
+uploadBox.ondragover = (e)=>{ e.preventDefault(); uploadBox.classList.add('drag'); };
+uploadBox.ondragleave = ()=> uploadBox.classList.remove('drag');
+uploadBox.ondrop = (e)=>{
+  e.preventDefault(); uploadBox.classList.remove('drag');
+  if(e.dataTransfer.files[0]) handleUpload(e.dataTransfer.files[0]);
+};
+fileInput.onchange = ()=>{ if(fileInput.files[0]) handleUpload(fileInput.files[0]); fileInput.value=''; };
+
+async function handleUpload(file){
+  if(file.size > 25*1024*1024){ toast('ไฟล์ใหญ่เกิน 25MB'); return; }
+  try{
+    setMainProgress('กำลังเข้ารหัส...');
+    const plainBuf = await file.arrayBuffer();
+    const encBuf = await encryptBytes(AES_KEY, plainBuf);
+    const id = crypto.randomUUID();
+    const blobPath = `${BLOB_DIR}/${id}.bin`;
+
+    setMainProgress('กำลังอัปโหลด...');
+    await ghPutFile(blobPath, encBuf, null, 'upload ' + id);
+
+    manifest.files.push({
+      id, name: file.name, size: file.size, type: file.type || 'application/octet-stream',
+      uploadedAt: new Date().toISOString()
+    });
+    setMainProgress('กำลังบันทึกรายการไฟล์...');
+    await saveManifest('add ' + file.name);
+
+    renderFiles();
+    toast('อัปโหลดสำเร็จ');
+  }catch(e){
+    toast('อัปโหลดไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+  }
+  setMainProgress('');
+}
+
+// ---------- download ----------
+async function downloadFile(f){
+  try{
+    setMainProgress('กำลังดาวน์โหลด...');
+    const blobFile = await ghGetFile(`${BLOB_DIR}/${f.id}.bin`);
+    if(!blobFile) throw new Error('ไม่พบไฟล์บน GitHub');
+    const plainBuf = await decryptBytes(AES_KEY, blobFile.buf);
+    const blob = new Blob([plainBuf], { type: f.type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }catch(e){
+    toast('ดาวน์โหลดไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+  }
+  setMainProgress('');
+}
+
+// ---------- delete ----------
+async function deleteFile(f){
+  if(!confirm('ลบไฟล์ "' + f.name + '" ?')) return;
+  try{
+    setMainProgress('กำลังลบ...');
+    const blobFile = await ghGetFile(`${BLOB_DIR}/${f.id}.bin`);
+    if(blobFile){ await ghDeleteFile(`${BLOB_DIR}/${f.id}.bin`, blobFile.sha, 'delete ' + f.name); }
+    manifest.files = manifest.files.filter(x=>x.id !== f.id);
+    await saveManifest('remove ' + f.name);
+    renderFiles();
+    toast('ลบไฟล์แล้ว');
+  }catch(e){
+    toast('ลบไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+  }
+  setMainProgress('');
+}
+
+// ---------- init ----------
+(function init(){
+  const saved = localStorage.getItem('fk_token');
+  if(saved){
+    document.getElementById('tokenInput').value = saved;
+    document.getElementById('rememberToken').checked = true;
+  }
+})();
+</script>
+</body>
+</html>
